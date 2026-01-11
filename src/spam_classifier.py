@@ -1,66 +1,79 @@
-print("Script started")
-
 import os
-import pandas as pd
 import re
+import pandas as pd
 import nltk
 
 from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.metrics import accuracy_score
 
+# Download stopwords (runs once, safe to keep)
 nltk.download("stopwords")
 
-# ---------- PATH FIX ----------
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_PATH = os.path.join(BASE_DIR, "data", "spam.csv")
 
-print("Looking for file at:", DATA_PATH)
-
-# ---------- LOAD DATA ----------
-data = pd.read_csv(DATA_PATH, encoding="latin-1")
-
-data = data[["v1", "v2"]]
-data.columns = ["label", "message"]
-
-# ---------- LABEL ENCODING ----------
-data["label"] = data["label"].map({"ham": 0, "spam": 1})
-
-# ---------- CLEAN TEXT ----------
-def clean_text(text):
+def clean_text(text: str) -> str:
+    """
+    Clean input text by:
+    - Lowercasing
+    - Removing special characters
+    - Removing extra spaces
+    """
     text = text.lower()
     text = re.sub(r"\W", " ", text)
     text = re.sub(r"\s+", " ", text)
-    return text
+    return text.strip()
 
-data["message"] = data["message"].apply(clean_text)
 
-# ---------- TF-IDF ----------
-vectorizer = TfidfVectorizer(stop_words=stopwords.words("english"))
-X = vectorizer.fit_transform(data["message"])
-y = data["label"]
+def train_model():
+    """
+    Loads data, trains the spam classifier model,
+    and returns model, vectorizer, and clean_text function.
+    """
 
-# ---------- SPLIT ----------
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+    # Get absolute path to project root
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    DATA_PATH = os.path.join(BASE_DIR, "data", "spam.csv")
 
-# ---------- MODEL ----------
-model = MultinomialNB()
-model.fit(X_train, y_train)
+    # Load dataset
+    data = pd.read_csv(DATA_PATH, encoding="latin-1")
 
-# ---------- ACCURACY ----------
-y_pred = model.predict(X_test)
-print("Accuracy:", accuracy_score(y_test, y_pred))
+    # Keep only required columns
+    data = data[["v1", "v2"]]
+    data.columns = ["label", "message"]
 
-# ---------- TEST ----------
-def predict_message(msg):
-    msg = clean_text(msg)
-    msg_vector = vectorizer.transform([msg])
-    prediction = model.predict(msg_vector)
-    return "Spam" if prediction[0] == 1 else "Not Spam"
+    # Encode labels
+    data["label"] = data["label"].map({"ham": 0, "spam": 1})
 
-print(predict_message("Congratulations! You won a free iPhone"))
-print(predict_message("Hey, are we meeting today?"))
+    # Clean messages
+    data["message"] = data["message"].apply(clean_text)
+
+    # Convert text to numbers using TF-IDF
+    vectorizer = TfidfVectorizer(stop_words=stopwords.words("english"))
+    X = vectorizer.fit_transform(data["message"])
+    y = data["label"]
+
+    # Train Naive Bayes model
+    model = MultinomialNB()
+    model.fit(X, y)
+
+    return model, vectorizer, clean_text
+
+
+# Allow running this file directly (optional test)
+if __name__ == "__main__":
+    model, vectorizer, clean_fn = train_model()
+
+    test_messages = [
+        "Congratulations! You won a free iPhone",
+        "Hey, are we meeting today?",
+        "WIN CASH NOW!!! Text WIN to 99999"
+    ]
+
+    for msg in test_messages:
+        cleaned = clean_fn(msg)
+        vector = vectorizer.transform([cleaned])
+        prediction = model.predict(vector)[0]
+
+        result = "SPAM" if prediction == 1 else "NOT SPAM"
+        print(f"Message: {msg}")
+        print(f"Prediction: {result}\n")
